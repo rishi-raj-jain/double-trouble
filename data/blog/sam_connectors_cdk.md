@@ -31,9 +31,9 @@ Looking at the [sam permissions](https://docs.aws.amazon.com/serverless-applicat
 
 But let's first have a look at the Sam Connectors.
 
-## Sam Connectors Example
+## What are Sam Connectors?
 
-Following the usual shebang of installing sam, cloning a hello world app (sam helps here) and opening up that old free tier aws account again, we can finally start.
+Let's look at this by example. Following the usual shebang of installing sam, cloning a hello world app (sam helps here) and opening up that old free tier aws account again, we can finally start.
 
 Our app will do a simple thing, it will create a lambda function which can read and write to a s3 bucket. The interesting part can be found from line 4 to 11:
 
@@ -122,7 +122,7 @@ Opening the function role, along with the `AWSLambdaBasicExecutionRole` default 
 
 That's quite a lot of permissions. 😃
 
-Interesting are the two different statements, the **first one** is for the **read connector**, the **second one** for **write**. Noteworthy is that the write statement mentions the bucket resource itself, though none of the granted actions work on the bucket level.
+Interesting are the two different statements, the **first one** is for the **read connector**, the **second one** for **write**. Noteworthy is that the write statement grants permission to the bucket resource itself, though none of the granted actions work on the bucket level.
 
 It can be debated how useful such an automatically generated policy is that you cannot alter or pin down further, but that might be the whole point - you are supposed to be lifted off the burdon of least privilege.
 
@@ -138,7 +138,7 @@ Interesting are also the supported recources for sam connectors. Generally the p
 
 Extra mutations occur because of the custom `Serverless::` resource types introduced by SAM. Now that we have a first taste of sam connectors, let's move over to the policies.
 
-## Sam Policy Templates
+## What are Sam Policy Templates?
 
 [Sam Policy templates](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-policy-templates.html) or as we dub them "community templates" - since the repo is open for [submissions](https://github.com/aws/serverless-application-model/blob/develop/samtranslator/policy_templates_data/policy_templates.json) - are another approach for better policies.
 
@@ -227,9 +227,7 @@ But before we do that, lets take a look what the CDK can provide for us out of t
 
 ## CDK and least privilege
 
-For Nodejs lambdas aws purposefully provides the [lambda-function-nodejs](https://www.npmjs.com/package/@aws-cdk/aws-lambda-nodejs) construct. It makes working with nodejs lambdas much easier for example due to its esbuild integration, so let's start with this.
-
-The NodejsFunction construct also creates an implicit iam role for us by default. With only a few lines we have our bucket and our lambda: 
+It is not like the CDK doesnt already have policy templates. Using the [lambda-function-nodejs](https://www.npmjs.com/package/@aws-cdk/aws-lambda-nodejs) construct we can quickly have ourselves a lambda function. The NodejsFunction construct here also creates an implicit iam role for us by default.
 
 ```javascript
 const myfunc = new NodejsFunction(this, "nodejs", {
@@ -296,11 +294,11 @@ So the CDK already has a selection of predefined policies, which can even be cus
 
 But can we still marry the CDK and sam together, to get the best of both worlds?
 
-## CDK meets Sam Connectors
+## CDK meets Sam Connectors?
 
 Having looked at sam connectors, it really doesnt look like they could challenge the default permission grant functions provided from the CDK.
 
-The CDK does make it possible to create sam serverless functions, but only via the low level Cloudformation resources.
+The CDK does make it possible to create sam serverless functions, but only via the low level L1 Cloudformation resources:
 
 ```javascript
 import * as sam from 'aws-cdk-lib/aws-sam';
@@ -310,23 +308,31 @@ new sam.CfnFunction(this, "sam-function", {
 })
 ```
 
-For the cdk to really add higher level integrations with sam wouldnt make too much sense here, as the the cdk and sam here really have a very similar use-case.
+For the cdk to really add higher level integrations with sam wouldn't make too much sense here, as the the cdk and sam here really have a very similar use-case.
 
 So let's jump right over to the policy templates!
 
 ## CDK meets Sam Policy Templates
 
+As the Sam policy templates are in a nice json format, it is indeed possible to import them into a cdk stack.
 
+After messing with just a little bit of code generation it is possible to import any policy from Sam into the CDK:
+```javascript
+import * as sampolicies from "./../../cdk-sam-policy-templates/";
+// ...
+sampolicies.PinpointEndpointAccessPolicy(this, { PinpointApplicationId: "pin123", RoleName: myfunc.role?.roleName! })
+```
+We have build this mainly via `cloudformation-include`, as the sam policies themselves are not just json but raw cloudformation and use its intrinsic functions. Gladly the cdk is still smart enough to create References from resources attributes used in the policy, which will ensure the appropriate dependencies in the stack, and a correct deployment order.
+
+What's nice about this is that you can contribute your policy as Cloudformation into the sam policy templates repo. From there, it could be taken either as is, for example in the serverless framework, or be used in sam and the cdk as well. This could make the sam policy templates a central place for sharing community policies with a larger audience.
+
+Would we recommend it? Probably not. A community-driven sync from sam policies to cdk seems like a weird approach. To share policies between IaC frameworks it would probably be easier to build a site where people can simply submit and vote on helpful policy templates. Such a library would be bound to blow up the voting could keep it in check. Paired with with a decent search it could actually save people some time.
+
+If you still want to have a look at the code its over [here](https://github.com/flyck/cdk-sam-policy-templates).
 ## Rounding up
 
-Looking into sam connectors and policy templates in this post I'm not sure the cdk could benefit from integrating these components.
+Rounding up the post it might be said that we might have fallen victim to a bit of a marketing scam and the general aws announcement hype. Looking a bit deeper Sam Connectors were disappointing. Simple `Read`and `Write` will not be good enough for least privilege.
 
-Rounding up the post it might be said that we might have fallen to a bit of a marketing scam and the general aws announcement hype. Looking a bit deeper it seems obvious that simple `Read`and `Write` policy templates cannot truly live up to the standard of least privilege. Specifically the part where it says `developers describe how data and events need to flow between two resources and the type of access required`. The idea that engineers simply declare "the flow" and then we have minimal permissions magically generated from that might be a little bit far fedged.
-
-What was also interesting is that while similar, none of the provided policy templates matched exactly. All of them provided a slightly different flavor, making different assumptions about the use-case, some being more, some being less permissive.
-
-The bain of the existance of least privilege also lies in giving access to new services or functionality. Official docs are not yet there, sometimes even Cloudformation support is lacking and usually we have to wait a couple of months for things to arrive in the CDK.
-
-What seems really needed is a community driven policy collection for least privilege, that is easy to contribute to, and that people know about. Even within the same company individual engineers start crafting least privilege policies from scratch, even when a colleague might have already done it for a different stack. This is especially true for bigger corporations and of course for the wider community in general.
+It was interesting to see that while similar, none of the provided policy templates from sam and the cdk were the same. All of them provided a slightly different flavor, making different assumptions about the use-case, some being more, some being less permissive.
 
 Community driven policies tailored for specific usecases should be the answer here, but it wont be as easy as simply differentiated between read and write.
