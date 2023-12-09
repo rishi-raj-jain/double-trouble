@@ -10,11 +10,14 @@
     "preview": "astro preview",
     "astro": "astro",
     "format": "prettier -w .",
-    "lint:eslint": "eslint . --ext .js,.ts,.astro",
+    "lint": "bun run lint:biome && bun run lint:js",
+    "lint:js": "eslint src --ext .js,.jsx,.ts,.tsx,.astro",
+    "lint:css": "stylelint 'src/**/*.[jt]sx'",
+    "lint:biome": "biome check .",
+    "fix": "bun run fix:biome && bun run fix:eslint",
+    "fix:eslint": "eslint src --ext .js,.jsx,.ts,.tsx --fix",
+    "fix:biome": "biome check . --apply-unsafe",
     "subfont": "subfont -ir --no-fallbacks --silent --root dist"
-  },
-  "engines": {
-    "node": ">=18.0.0"
   },
   "devDependencies": {
     "@astrojs/mdx": "^2.0.0",
@@ -24,6 +27,7 @@
     "@astrojs/tailwind": "^5.0.3",
     "@astrolib/analytics": "^0.4.2",
     "@astrolib/seo": "^0.6.0",
+    "@biomejs/biome": "1.4.1",
     "@fontsource/inter": "^5.0.16",
     "@tailwindcss/typography": "^0.5.10",
     "@typescript-eslint/eslint-plugin": "^6.13.2",
